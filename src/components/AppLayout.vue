@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { Modal, message } from 'ant-design-vue'
 import {
   ApartmentOutlined,
   FormOutlined,
@@ -10,12 +11,18 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   UserOutlined,
+  LogoutOutlined,
+  DownOutlined,
 } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { useApplicationStore } from '@/stores/application'
+import { useFlowStore } from '@/stores/flow'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const applicationStore = useApplicationStore()
+const flowStore = useFlowStore()
 const collapsed = ref(false)
 
 const menuItems = [
@@ -24,6 +31,10 @@ const menuItems = [
   { key: '/todo', icon: CheckSquareOutlined, label: '我的待办' },
   { key: '/done', icon: ScheduleOutlined, label: '我的已办' },
   { key: '/mine', icon: FileSearchOutlined, label: '我发起的' },
+]
+
+const userMenuItems = [
+  { key: 'logout', icon: LogoutOutlined, label: '退出登录' },
 ]
 
 const selectedKeys = computed(() => {
@@ -40,6 +51,24 @@ const selectedKeys = computed(() => {
 function onMenuClick({ key }: { key: string }) {
   router.push(key)
 }
+
+function onUserMenuClick({ key }: { key: string }) {
+  if (key === 'logout') {
+    Modal.confirm({
+      title: '确认退出',
+      content: '确定要退出登录吗？',
+      okText: '确认',
+      cancelText: '取消',
+      onOk() {
+        userStore.logout()
+        message.success('已退出登录')
+        router.push('/login')
+      },
+    })
+  }
+}
+
+const currentUser = computed(() => userStore.currentUser)
 </script>
 
 <template>
@@ -77,10 +106,13 @@ function onMenuClick({ key }: { key: string }) {
           />
         </div>
         <div class="header-right">
-          <a-space>
-            <UserOutlined />
-            <span>{{ userStore.currentUserInfo.name }}</span>
-          </a-space>
+          <a-dropdown :menu="{ items: userMenuItems, onClick: onUserMenuClick }" placement="bottomRight">
+            <a-space class="user-info">
+              <UserOutlined />
+              <span>{{ currentUser.name }}</span>
+              <DownOutlined style="font-size: 12px" />
+            </a-space>
+          </a-dropdown>
         </div>
       </a-layout-header>
       <a-layout-content class="app-content">
@@ -132,6 +164,16 @@ function onMenuClick({ key }: { key: string }) {
 .header-right {
   display: flex;
   align-items: center;
+}
+
+.user-info {
+  cursor: pointer;
+  padding: 0 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  &:hover {
+    background: #f5f5f5;
+  }
 }
 
 .app-content {

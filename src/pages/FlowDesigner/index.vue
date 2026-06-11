@@ -38,7 +38,7 @@ const nodeTypes = {
   end: markRaw(EndNode),
 }
 
-const { onConnect, addEdges, project, vueFlowRef, addNodes, onNodesChange, onEdgesChange, applyNodeChanges, applyEdgeChanges } = useVueFlow({
+const { onConnect, addEdges, project, vueFlowRef, addNodes, updateNodeData, onNodesChange, onEdgesChange, applyNodeChanges, applyEdgeChanges } = useVueFlow({
   id: flowId.value,
 })
 
@@ -125,10 +125,10 @@ function onNodeClick({ node }: { node: Node }) {
   const flowNode: FlowNode = {
     id: node.id,
     type: (node.type as 'start' | 'approver' | 'end') || 'approver',
-    label: getNodeLabel(node),
+    label: node.data?.label || node.label || '',
     position: { x: node.position.x, y: node.position.y },
     data: {
-      label: getNodeLabel(node),
+      label: node.data?.label || node.label || '',
       approverType: (node.data?.approverType ?? undefined) as 'user' | 'role' | 'manager' | undefined,
       approverIds: node.data?.approverIds as string[] | undefined,
     },
@@ -142,16 +142,11 @@ function onPaneClick() {
 
 function onPropertyUpdate(updatedNode: FlowNode) {
   selectedNode.value = updatedNode
-  const idx = nodes.value.findIndex(n => n.id === updatedNode.id)
-  if (idx !== -1) {
-    nodes.value[idx] = {
-      ...nodes.value[idx],
-      type: updatedNode.type,
-      label: updatedNode.label,
-      position: { ...updatedNode.position },
-      data: { ...updatedNode.data },
-    }
-  }
+  updateNodeData(updatedNode.id, {
+    label: updatedNode.data.label,
+    approverType: updatedNode.data.approverType,
+    approverIds: updatedNode.data.approverIds,
+  })
 }
 
 function buildFlowNodeFromVueFlow(n: any): FlowNode {

@@ -28,8 +28,8 @@ export const useApplicationStore = defineStore('application', () => {
       flowName: flow.name,
       title,
       description,
-      applicantId: userStore.currentUserInfo.id,
-      applicantName: userStore.currentUserInfo.name,
+      applicantId: userStore.currentUser.id,
+      applicantName: userStore.currentUser.name,
       status: 'pending',
       currentNodeId: nextNodeId,
       createdAt: new Date().toISOString(),
@@ -46,6 +46,7 @@ export const useApplicationStore = defineStore('application', () => {
   function getMyTodo(): Application[] {
     const userStore = useUserStore()
     const flowStore = useFlowStore()
+    const user = userStore.currentUser
     return applications.value.filter(app => {
       if (app.status !== 'pending') return false
       const flow = flowStore.getFlowById(app.flowId)
@@ -54,16 +55,16 @@ export const useApplicationStore = defineStore('application', () => {
       if (!currentNode || currentNode.type !== 'approver') return false
       const data = currentNode.data
       if (data.approverType === 'user') {
-        return data.approverIds?.includes(userStore.currentUserInfo.id)
+        return data.approverIds?.includes(user.id)
       }
       if (data.approverType === 'role') {
-        return data.approverIds?.includes(userStore.currentUserInfo.roleId)
+        return data.approverIds?.includes(user.roleId)
       }
       if (data.approverType === 'manager') {
         const applicant = userStore.getUserById(app.applicantId)
         if (applicant) {
           const managerRole = 'role-3'
-          return userStore.currentUserInfo.roleId === managerRole
+          return user.roleId === managerRole
         }
       }
       return false
@@ -72,19 +73,22 @@ export const useApplicationStore = defineStore('application', () => {
 
   function getMyDone(): Application[] {
     const userStore = useUserStore()
-    const myRecords = records.value.filter(r => r.approverId === userStore.currentUserInfo.id)
+    const user = userStore.currentUser
+    const myRecords = records.value.filter(r => r.approverId === user.id)
     const doneAppIds = new Set(myRecords.map(r => r.applicationId))
     return applications.value.filter(a => doneAppIds.has(a.id))
   }
 
   function getMyInitiated(): Application[] {
     const userStore = useUserStore()
-    return applications.value.filter(a => a.applicantId === userStore.currentUserInfo.id)
+    const user = userStore.currentUser
+    return applications.value.filter(a => a.applicantId === user.id)
   }
 
   function approveApplication(applicationId: string, comment: string) {
     const userStore = useUserStore()
     const flowStore = useFlowStore()
+    const user = userStore.currentUser
     const app = applications.value.find(a => a.id === applicationId)
     if (!app) return
 
@@ -99,8 +103,8 @@ export const useApplicationStore = defineStore('application', () => {
       applicationId,
       nodeId: app.currentNodeId,
       nodeName: currentNode.label,
-      approverId: userStore.currentUserInfo.id,
-      approverName: userStore.currentUserInfo.name,
+      approverId: user.id,
+      approverName: user.name,
       action: 'approve',
       comment,
       createdAt: new Date().toISOString(),
@@ -124,6 +128,7 @@ export const useApplicationStore = defineStore('application', () => {
   function rejectApplication(applicationId: string, comment: string) {
     const userStore = useUserStore()
     const flowStore = useFlowStore()
+    const user = userStore.currentUser
     const app = applications.value.find(a => a.id === applicationId)
     if (!app) return
 
@@ -135,8 +140,8 @@ export const useApplicationStore = defineStore('application', () => {
       applicationId,
       nodeId: app.currentNodeId,
       nodeName: currentNode.label,
-      approverId: userStore.currentUserInfo.id,
-      approverName: userStore.currentUserInfo.name,
+      approverId: user.id,
+      approverName: user.name,
       action: 'reject',
       comment,
       createdAt: new Date().toISOString(),
@@ -153,6 +158,7 @@ export const useApplicationStore = defineStore('application', () => {
   function isCurrentApprover(applicationId: string): boolean {
     const userStore = useUserStore()
     const flowStore = useFlowStore()
+    const user = userStore.currentUser
     const app = applications.value.find(a => a.id === applicationId)
     if (!app || app.status !== 'pending') return false
     const flow = flowStore.getFlowById(app.flowId)
@@ -160,11 +166,11 @@ export const useApplicationStore = defineStore('application', () => {
     const currentNode = flow.nodes.find(n => n.id === app.currentNodeId)
     if (!currentNode || currentNode.type !== 'approver') return false
     const data = currentNode.data
-    if (data.approverType === 'user') return data.approverIds?.includes(userStore.currentUserInfo.id) ?? false
-    if (data.approverType === 'role') return data.approverIds?.includes(userStore.currentUserInfo.roleId) ?? false
+    if (data.approverType === 'user') return data.approverIds?.includes(user.id) ?? false
+    if (data.approverType === 'role') return data.approverIds?.includes(user.roleId) ?? false
     if (data.approverType === 'manager') {
       const applicant = userStore.getUserById(app.applicantId)
-      return applicant ? userStore.currentUserInfo.roleId === 'role-3' : false
+      return applicant ? user.roleId === 'role-3' : false
     }
     return false
   }

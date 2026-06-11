@@ -9,11 +9,11 @@ export const roles: Role[] = [
 ]
 
 export const users: User[] = [
-  { id: 'user-1', name: '张三', roleId: 'role-1' },
-  { id: 'user-2', name: '李四', roleId: 'role-2' },
-  { id: 'user-3', name: '王五', roleId: 'role-3' },
-  { id: 'user-4', name: '赵六', roleId: 'role-4' },
-  { id: 'user-5', name: '孙七', roleId: 'role-5' },
+  { id: 'user-1', name: '张三', roleId: 'role-1', password: '123456' },
+  { id: 'user-2', name: '李四', roleId: 'role-2', password: '123456' },
+  { id: 'user-3', name: '王五', roleId: 'role-3', password: '123456' },
+  { id: 'user-4', name: '赵六', roleId: 'role-4', password: '123456' },
+  { id: 'user-5', name: '孙七', roleId: 'role-5', password: '123456' },
 ]
 
 export const currentUser: User = users[3]

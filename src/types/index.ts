@@ -64,6 +64,7 @@ export interface User {
   id: string
   name: string
   roleId: string
+  password: string
 }
 
 export interface Role {
