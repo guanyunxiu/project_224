@@ -33,8 +33,8 @@ function goDetail(id: string) {
         <a-list-item>
           <a-card hoverable class="done-card" @click="goDetail(item.id)">
             <div class="done-card-header">
-              <a-tag :color="item.status === 'approved' ? 'green' : 'red'">
-                {{ item.status === 'approved' ? '已通过' : '已驳回' }}
+              <a-tag :color="item.status === 'approved' ? 'green' : item.status === 'rejected' ? 'red' : 'default'">
+                {{ item.status === 'approved' ? '已通过' : item.status === 'rejected' ? '已驳回' : '已撤回' }}
               </a-tag>
               <span class="done-card-time">
                 <ClockCircleOutlined />

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { FlowDefinition, FlowNode, FlowEdge } from '@/types'
+import type { FlowDefinition, FlowNode, FlowEdge, FormField } from '@/types'
 
 function generateId(): string {
   return 'id-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9)
@@ -10,7 +10,16 @@ export const useFlowStore = defineStore('flow', () => {
   const flows = ref<FlowDefinition[]>([])
 
   function initDefaultFlows() {
-    if (flows.value.length > 0) return
+    if (flows.value.length > 0) {
+      flows.value.forEach(f => {
+        if (!f.formFields) f.formFields = []
+        f.edges.forEach(e => {
+          if (e.conditionExpression === undefined) e.conditionExpression = undefined
+          if (e.label === undefined) e.label = undefined
+        })
+      })
+      return
+    }
     const defaultFlow: FlowDefinition = {
       id: generateId(),
       name: '请假审批流程',
@@ -26,6 +35,7 @@ export const useFlowStore = defineStore('flow', () => {
         { id: 'e-a1-a2', source: 'node-approver-1', target: 'node-approver-2' },
         { id: 'e-a2-end', source: 'node-approver-2', target: 'node-end' },
       ],
+      formFields: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -39,6 +49,7 @@ export const useFlowStore = defineStore('flow', () => {
       status: 'draft',
       nodes: [],
       edges: [],
+      formFields: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -73,6 +84,14 @@ export const useFlowStore = defineStore('flow', () => {
     }
   }
 
+  function updateFlowFormFields(id: string, formFields: FormField[]) {
+    const index = flows.value.findIndex(f => f.id === id)
+    if (index !== -1) {
+      flows.value[index].formFields = formFields
+      flows.value[index].updatedAt = new Date().toISOString()
+    }
+  }
+
   function deleteFlow(id: string) {
     flows.value = flows.value.filter(f => f.id !== id)
   }
@@ -97,6 +116,7 @@ export const useFlowStore = defineStore('flow', () => {
     updateFlow,
     updateFlowNodes,
     updateFlowEdges,
+    updateFlowFormFields,
     deleteFlow,
     publishFlow,
     getPublishedFlows,

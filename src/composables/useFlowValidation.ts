@@ -19,11 +19,9 @@ export function useFlowValidation() {
     const endNodes = nodes.filter(n => n.type === 'end')
     if (endNodes.length === 0) {
       errors.push('必须有一个结束节点')
-    } else if (endNodes.length > 1) {
-      errors.push('只能有一个结束节点')
     }
 
-    if (startNodes.length !== 1 || endNodes.length !== 1) {
+    if (startNodes.length !== 1) {
       return { valid: false, errors }
     }
 
@@ -33,14 +31,19 @@ export function useFlowValidation() {
     }
 
     const adjacency = new Map<string, string[]>()
-    nodes.forEach(n => adjacency.set(n.id, []))
+    const reverseAdj = new Map<string, string[]>()
+    nodes.forEach(n => {
+      adjacency.set(n.id, [])
+      reverseAdj.set(n.id, [])
+    })
     edges.forEach(e => {
       const list = adjacency.get(e.source)
       if (list) list.push(e.target)
+      const rlist = reverseAdj.get(e.target)
+      if (rlist) rlist.push(e.source)
     })
 
     const startId = startNodes[0].id
-    const endId = endNodes[0].id
     const visited = new Set<string>()
     const path = new Set<string>()
     let hasCycle = false
@@ -68,11 +71,13 @@ export function useFlowValidation() {
       errors.push('流程不允许有环路')
     }
 
-    if (!visited.has(endId)) {
-      errors.push('开始节点无法到达结束节点')
+    for (const endNode of endNodes) {
+      if (!visited.has(endNode.id)) {
+        errors.push('开始节点无法到达结束节点')
+      }
     }
 
-    const orphanNodes = nodes.filter(n => !visited.has(n.id))
+    const orphanNodes = nodes.filter(n => !visited.has(n.id) && n.type !== 'start')
     if (orphanNodes.length > 0) {
       errors.push(`存在孤立节点: ${orphanNodes.map(n => n.label).join('、')}`)
     }
@@ -84,6 +89,43 @@ export function useFlowValidation() {
       } else if (node.data.approverType !== 'manager' && (!node.data.approverIds || node.data.approverIds.length === 0)) {
         errors.push(`审批节点"${node.label}"未配置审批人`)
       }
+    }
+
+    const gatewayNodes = nodes.filter(n => n.type === 'parallelGateway' || n.type === 'conditionGateway')
+    for (const node of gatewayNodes) {
+      if (!node.data.gatewayType) {
+        errors.push(`网关节点"${node.label}"未配置网关类型（分裂/汇聚）`)
+        continue
+      }
+
+      const outgoing = edges.filter(e => e.source === node.id)
+      const incoming = edges.filter(e => e.target === node.id)
+
+      if (node.data.gatewayType === 'split') {
+        if (outgoing.length < 2) {
+          errors.push(`分裂网关"${node.label}"至少需要2条出边（当前${outgoing.length}条）`)
+        }
+        if (node.type === 'conditionGateway') {
+          for (const edge of outgoing) {
+            if (!edge.conditionExpression) {
+              const targetNode = nodes.find(n => n.id === edge.target)
+              errors.push(`条件网关"${node.label}"的出边（指向"${targetNode?.label || edge.target}"）未配置条件表达式`)
+            }
+          }
+        }
+      }
+
+      if (node.data.gatewayType === 'converge') {
+        if (incoming.length < 2) {
+          errors.push(`汇聚网关"${node.label}"至少需要2条入边（当前${incoming.length}条）`)
+        }
+      }
+    }
+
+    const parallelSplitNodes = nodes.filter(n => n.type === 'parallelGateway' && n.data.gatewayType === 'split')
+    const parallelConvergeNodes = nodes.filter(n => n.type === 'parallelGateway' && n.data.gatewayType === 'converge')
+    if (parallelSplitNodes.length !== parallelConvergeNodes.length) {
+      errors.push(`并行分裂网关(${parallelSplitNodes.length}个)与汇聚网关(${parallelConvergeNodes.length}个)数量不匹配`)
     }
 
     return { valid: errors.length === 0, errors }

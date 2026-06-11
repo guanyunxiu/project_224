@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { PlayCircleOutlined, UserSwitchOutlined, CheckCircleOutlined } from '@ant-design/icons-vue'
+import { PlayCircleOutlined, UserSwitchOutlined, CheckCircleOutlined, ForkOutlined, BranchesOutlined } from '@ant-design/icons-vue'
 
 const nodeTypes = [
   { type: 'start', label: '开始节点', icon: PlayCircleOutlined, color: '#1677ff', desc: '流程起点' },
   { type: 'approver', label: '审批人节点', icon: UserSwitchOutlined, color: '#fa8c16', desc: '审批处理' },
+  { type: 'parallelGateway', label: '并行网关', icon: ForkOutlined, color: '#722ed1', desc: '多路并行/汇聚' },
+  { type: 'conditionGateway', label: '条件网关', icon: BranchesOutlined, color: '#eb2f96', desc: '条件分支路由' },
   { type: 'end', label: '结束节点', icon: CheckCircleOutlined, color: '#52c41a', desc: '流程终点' },
 ]
 
@@ -65,6 +67,7 @@ function onDragStart(event: DragEvent, nodeType: string) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
 }
 
 .node-item {

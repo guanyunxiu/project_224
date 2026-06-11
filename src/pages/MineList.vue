@@ -24,6 +24,7 @@ const statusMap: Record<string, { color: string; text: string }> = {
   pending: { color: 'orange', text: '审批中' },
   approved: { color: 'green', text: '已通过' },
   rejected: { color: 'red', text: '已驳回' },
+  withdrawn: { color: 'default', text: '已撤回' },
 }
 </script>
 

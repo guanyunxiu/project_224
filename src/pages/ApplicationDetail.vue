@@ -9,6 +9,9 @@ import {
   UserOutlined,
   FileTextOutlined,
   HistoryOutlined,
+  UserAddOutlined,
+  SwapOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons-vue'
 import { useApplicationStore } from '@/stores/application'
 import { useFlowStore } from '@/stores/flow'
@@ -24,6 +27,7 @@ const userStore = useUserStore()
 const appId = computed(() => route.params.id as string)
 const app = computed(() => applicationStore.getApplicationById(appId.value))
 const canApprove = computed(() => applicationStore.isCurrentApprover(appId.value))
+const canWithdrawApp = computed(() => applicationStore.canWithdraw(appId.value))
 
 const records = computed(() => applicationStore.getRecordsByApplicationId(appId.value))
 
@@ -37,20 +41,51 @@ const flowNodes = computed(() => {
   return flow.value.nodes.filter(n => n.type !== 'start' && n.type !== 'end')
 })
 
-const currentNodeLabel = computed(() => {
+const currentNodesLabel = computed(() => {
   if (!flow.value || !app.value) return ''
-  const node = flow.value.nodes.find(n => n.id === app.value.currentNodeId)
-  return node?.label ?? ''
+  return app.value.currentNodeIds
+    .map(id => flow.value!.nodes.find(n => n.id === id)?.label || '')
+    .filter(Boolean)
+    .join('、')
 })
 
 const rejectVisible = ref(false)
 const rejectComment = ref('')
 
+const preCountersignVisible = ref(false)
+const preCountersignType = ref<'user' | 'role' | 'manager'>('user')
+const preCountersignIds = ref<string[]>([])
+
+const postCountersignVisible = ref(false)
+const postCountersignType = ref<'user' | 'role' | 'manager'>('user')
+const postCountersignIds = ref<string[]>([])
+
+const transferVisible = ref(false)
+const transferToId = ref<string>('')
+const transferComment = ref('')
+
 const statusMap: Record<string, { color: string; text: string }> = {
   pending: { color: 'orange', text: '审批中' },
   approved: { color: 'green', text: '已通过' },
   rejected: { color: 'red', text: '已驳回' },
+  withdrawn: { color: 'default', text: '已撤回' },
 }
+
+const approverTypeOptions = [
+  { value: 'user', label: '指定用户' },
+  { value: 'role', label: '指定角色' },
+  { value: 'manager', label: '发起人主管' },
+]
+
+const userOptions = userStore.userList.map(u => ({
+  value: u.id,
+  label: `${u.name} (${userStore.getRoleName(u.roleId)})`,
+}))
+
+const roleOptions = userStore.roleList.map(r => ({
+  value: r.id,
+  label: r.name,
+}))
 
 function formatDate(dateStr: string) {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
@@ -74,6 +109,63 @@ function handleReject() {
   applicationStore.rejectApplication(appId.value, rejectComment.value)
   rejectVisible.value = false
   message.success('已驳回')
+}
+
+function handlePreCountersign() {
+  preCountersignType.value = 'user'
+  preCountersignIds.value = []
+  preCountersignVisible.value = true
+}
+
+function submitPreCountersign() {
+  if (preCountersignType.value !== 'manager' && preCountersignIds.value.length === 0) {
+    message.warning('请选择加签人')
+    return
+  }
+  applicationStore.preCountersign(appId.value, preCountersignType.value, preCountersignIds.value)
+  preCountersignVisible.value = false
+  message.success('前加签成功')
+}
+
+function handlePostCountersign() {
+  postCountersignType.value = 'user'
+  postCountersignIds.value = []
+  postCountersignVisible.value = true
+}
+
+function submitPostCountersign() {
+  if (postCountersignType.value !== 'manager' && postCountersignIds.value.length === 0) {
+    message.warning('请选择加签人')
+    return
+  }
+  applicationStore.postCountersign(appId.value, postCountersignType.value, postCountersignIds.value)
+  postCountersignVisible.value = false
+  message.success('后加签成功')
+}
+
+function handleTransfer() {
+  transferToId.value = ''
+  transferComment.value = ''
+  transferVisible.value = true
+}
+
+function submitTransfer() {
+  if (!transferToId.value) {
+    message.warning('请选择转办人')
+    return
+  }
+  applicationStore.transferApplication(appId.value, transferToId.value, transferComment.value)
+  transferVisible.value = false
+  message.success('转办成功')
+}
+
+function handleWithdraw() {
+  const result = applicationStore.withdrawApplication(appId.value)
+  if (result.success) {
+    message.success(result.message)
+  } else {
+    message.error(result.message)
+  }
 }
 
 function getNodeApproverInfo(nodeId: string): string {
@@ -101,8 +193,32 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
   if (!app.value) return 'waiting'
   const record = getNodeRecord(nodeId)
   if (record) return 'done'
-  if (app.value.currentNodeId === nodeId) return 'current'
+  if (app.value.currentNodeIds.includes(nodeId)) return 'current'
   return 'waiting'
+}
+
+function getActionLabel(action: string): string {
+  const map: Record<string, string> = {
+    approve: '已同意',
+    reject: '已驳回',
+    preCountersign: '前加签',
+    postCountersign: '后加签',
+    transfer: '转办',
+    withdraw: '撤回',
+  }
+  return map[action] || action
+}
+
+function getActionColor(action: string): string {
+  const map: Record<string, string> = {
+    approve: 'green',
+    reject: 'red',
+    preCountersign: 'purple',
+    postCountersign: 'purple',
+    transfer: 'blue',
+    withdraw: 'default',
+  }
+  return map[action] || 'default'
 }
 </script>
 
@@ -133,7 +249,10 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
             </a-descriptions-item>
             <a-descriptions-item label="发起时间">{{ formatDate(app.createdAt) }}</a-descriptions-item>
             <a-descriptions-item v-if="app.status === 'pending'" label="当前节点">
-              <a-tag color="orange">{{ currentNodeLabel }}</a-tag>
+              <a-tag color="orange">{{ currentNodesLabel || '无' }}</a-tag>
+              <span v-if="app.pendingCountersigns.length > 0" class="countersign-hint">
+                (含{{ app.pendingCountersigns.length }}个加签待审)
+              </span>
             </a-descriptions-item>
             <a-descriptions-item label="申请说明">
               <span v-if="app.description">{{ app.description }}</span>
@@ -149,6 +268,33 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
             <a-button danger size="large" @click="showRejectModal">
               <CloseCircleOutlined />
               驳回
+            </a-button>
+            <a-dropdown>
+              <a-button size="large">
+                <UserAddOutlined />
+                加签
+              </a-button>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item @click="handlePreCountersign">
+                    <UserAddOutlined /> 前加签（加签人先审）
+                  </a-menu-item>
+                  <a-menu-item @click="handlePostCountersign">
+                    <UserAddOutlined /> 后加签（当前人先审）
+                  </a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+            <a-button size="large" @click="handleTransfer">
+              <SwapOutlined />
+              转办
+            </a-button>
+          </div>
+
+          <div v-if="canWithdrawApp" class="withdraw-actions">
+            <a-button @click="handleWithdraw">
+              <RollbackOutlined />
+              撤回申请
             </a-button>
           </div>
         </a-card>
@@ -174,7 +320,7 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
                     :color="getNodeRecord(node.id)?.action === 'approve' ? 'green' : 'red'"
                     size="small"
                   >
-                    {{ getNodeRecord(node.id)?.action === 'approve' ? '已同意' : '已驳回' }}
+                    {{ getActionLabel(getNodeRecord(node.id)?.action || '') }}
                   </a-tag>
                   <a-tag v-else-if="getNodeStatus(node.id) === 'current'" color="orange" size="small">
                     审批中
@@ -187,6 +333,9 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
                 <div v-if="getNodeRecord(node.id)" class="timeline-node-record">
                   <div class="timeline-record-user">
                     {{ getNodeRecord(node.id)?.approverName }}
+                    <span v-if="getNodeRecord(node.id)?.transferToName" class="transfer-info">
+                      → {{ getNodeRecord(node.id)?.transferToName }}
+                    </span>
                     <span class="timeline-record-time">{{ formatDate(getNodeRecord(node.id)!.createdAt) }}</span>
                   </div>
                   <div v-if="getNodeRecord(node.id)?.comment" class="timeline-record-comment">
@@ -196,6 +345,13 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
               </div>
             </a-timeline-item>
           </a-timeline>
+
+          <div v-if="records.filter(r => r.action === 'withdraw').length > 0" class="withdraw-record">
+            <a-tag color="default">撤回记录</a-tag>
+            <div v-for="r in records.filter(r => r.action === 'withdraw')" :key="r.id" class="withdraw-item">
+              {{ r.approverName }} 于 {{ formatDate(r.createdAt) }} 撤回了申请
+            </div>
+          </div>
 
           <a-empty v-if="flowNodes.length === 0" description="暂无审批节点" />
         </a-card>
@@ -219,6 +375,66 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
             :maxlength="200"
             show-count
           />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="preCountersignVisible"
+      title="前加签"
+      ok-text="确认加签"
+      cancel-text="取消"
+      @ok="submitPreCountersign"
+    >
+      <a-alert message="前加签：插入的审批人先于当前人审批" type="info" show-icon style="margin-bottom: 16px" />
+      <a-form layout="vertical">
+        <a-form-item label="加签人类型">
+          <a-select v-model:value="preCountersignType" :options="approverTypeOptions" />
+        </a-form-item>
+        <a-form-item v-if="preCountersignType === 'user'" label="选择加签用户">
+          <a-select v-model:value="preCountersignIds" :options="userOptions" mode="multiple" placeholder="请选择用户" />
+        </a-form-item>
+        <a-form-item v-if="preCountersignType === 'role'" label="选择加签角色">
+          <a-select v-model:value="preCountersignIds" :options="roleOptions" mode="multiple" placeholder="请选择角色" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="postCountersignVisible"
+      title="后加签"
+      ok-text="确认加签"
+      cancel-text="取消"
+      @ok="submitPostCountersign"
+    >
+      <a-alert message="后加签：当前人审批后，加签人再审批" type="info" show-icon style="margin-bottom: 16px" />
+      <a-form layout="vertical">
+        <a-form-item label="加签人类型">
+          <a-select v-model:value="postCountersignType" :options="approverTypeOptions" />
+        </a-form-item>
+        <a-form-item v-if="postCountersignType === 'user'" label="选择加签用户">
+          <a-select v-model:value="postCountersignIds" :options="userOptions" mode="multiple" placeholder="请选择用户" />
+        </a-form-item>
+        <a-form-item v-if="postCountersignType === 'role'" label="选择加签角色">
+          <a-select v-model:value="postCountersignIds" :options="roleOptions" mode="multiple" placeholder="请选择角色" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="transferVisible"
+      title="转办"
+      ok-text="确认转办"
+      cancel-text="取消"
+      @ok="submitTransfer"
+    >
+      <a-alert message="转办后原待办将消失，转给他人处理" type="info" show-icon style="margin-bottom: 16px" />
+      <a-form layout="vertical">
+        <a-form-item label="转办给" required>
+          <a-select v-model:value="transferToId" :options="userOptions" placeholder="请选择转办人" show-search :filter-option="(input: string, option: any) => option.label.toLowerCase().includes(input.toLowerCase())" />
+        </a-form-item>
+        <a-form-item label="转办说明">
+          <a-textarea v-model:value="transferComment" placeholder="请输入转办说明" :rows="3" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -264,6 +480,21 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid #f0f0f0;
+  flex-wrap: wrap;
+}
+
+.withdraw-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #f0f0f0;
+}
+
+.countersign-hint {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-left: 8px;
 }
 
 .timeline-card {
@@ -305,6 +536,11 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
   color: rgba(0, 0, 0, 0.65);
 }
 
+.transfer-info {
+  color: #1677ff;
+  margin: 0 4px;
+}
+
 .timeline-record-time {
   font-size: 11px;
   color: rgba(0, 0, 0, 0.45);
@@ -312,6 +548,18 @@ function getNodeStatus(nodeId: string): 'done' | 'current' | 'waiting' {
 }
 
 .timeline-record-comment {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.65);
+  margin-top: 4px;
+}
+
+.withdraw-record {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed #f0f0f0;
+}
+
+.withdraw-item {
   font-size: 12px;
   color: rgba(0, 0, 0, 0.65);
   margin-top: 4px;
